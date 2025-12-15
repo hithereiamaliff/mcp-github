@@ -361,7 +361,9 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
     let toolChart, hourlyChart;
     
     async function fetchData() {
-      const res = await fetch('/analytics');
+      // Get base path from current URL (handles nginx reverse proxy paths like /github/)
+      const basePath = window.location.pathname.replace(/\/analytics\/dashboard\/?$/, '');
+      const res = await fetch(basePath + '/analytics');
       return res.json();
     }
     
