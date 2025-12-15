@@ -362,7 +362,7 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
     
     async function fetchData() {
       // Get base path from current URL (handles nginx reverse proxy paths like /github/)
-      const basePath = window.location.pathname.replace(/\/analytics\/dashboard\/?$/, '');
+      const basePath = window.location.pathname.replace(/\\/analytics\\/dashboard\\/?$/, '');
       const res = await fetch(basePath + '/analytics');
       return res.json();
     }
@@ -442,10 +442,16 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
     }
     
     async function refresh() {
-      const data = await fetchData();
-      updateStats(data);
-      updateCharts(data);
-      updateRecentCalls(data);
+      try {
+        const data = await fetchData();
+        console.log('Analytics data:', data);
+        updateStats(data);
+        updateCharts(data);
+        updateRecentCalls(data);
+      } catch (err) {
+        console.error('Failed to load analytics:', err);
+        document.getElementById('stats').innerHTML = '<p style="color:#f85149;text-align:center;padding:20px;">Failed to load analytics data</p>';
+      }
     }
     
     refresh();
