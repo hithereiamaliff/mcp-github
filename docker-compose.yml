@@ -15,6 +15,9 @@ services:
       - HOST=0.0.0.0
       - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
       - NODE_ENV=production
+      - ANALYTICS_FILE=/app/data/github-mcp-analytics.json
+    volumes:
+      - analytics-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -32,3 +35,6 @@ services:
 networks:
   mcp-network:
     driver: bridge
+
+volumes:
+  analytics-data:

@@ -14,6 +14,8 @@
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Octokit } from 'octokit';
@@ -26,6 +28,7 @@ import { registerSearchTools } from './tools/search.js';
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const GITHUB_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN || '';
+const ANALYTICS_FILE = process.env.ANALYTICS_FILE || '/app/data/github-mcp-analytics.json';
 
 // Analytics tracking
 interface Analytics {
@@ -41,7 +44,7 @@ interface Analytics {
   hourlyRequests: Record<string, number>;
 }
 
-const analytics: Analytics = {
+const defaultAnalytics: Analytics = {
   serverStartTime: new Date().toISOString(),
   totalRequests: 0,
   totalToolCalls: 0,
@@ -53,6 +56,52 @@ const analytics: Analytics = {
   clientsByUserAgent: {},
   hourlyRequests: {},
 };
+
+// Load analytics from file or use defaults
+function loadAnalytics(): Analytics {
+  try {
+    if (fs.existsSync(ANALYTICS_FILE)) {
+      const data = fs.readFileSync(ANALYTICS_FILE, 'utf-8');
+      const loaded = JSON.parse(data) as Analytics;
+      console.log(`📊 Loaded analytics from ${ANALYTICS_FILE}`);
+      return loaded;
+    }
+  } catch (error) {
+    console.warn('⚠️ Could not load analytics file, starting fresh:', error);
+  }
+  return { ...defaultAnalytics };
+}
+
+// Save analytics to file
+function saveAnalytics(): void {
+  try {
+    const dir = path.dirname(ANALYTICS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(ANALYTICS_FILE, JSON.stringify(analytics, null, 2));
+  } catch (error) {
+    console.warn('⚠️ Could not save analytics file:', error);
+  }
+}
+
+// Auto-save analytics every 5 minutes
+setInterval(saveAnalytics, 5 * 60 * 1000);
+
+// Save on process exit
+process.on('SIGTERM', () => {
+  console.log('📊 Saving analytics before shutdown...');
+  saveAnalytics();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('📊 Saving analytics before shutdown...');
+  saveAnalytics();
+  process.exit(0);
+});
+
+const analytics: Analytics = loadAnalytics();
 
 function getClientIp(req: Request): string {
   return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 
@@ -347,6 +396,14 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
         <h3>Hourly Requests (Last 24h)</h3>
         <canvas id="hourlyChart"></canvas>
       </div>
+      <div class="chart-card">
+        <h3>Clients by User Agent</h3>
+        <canvas id="clientChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Top IPs</h3>
+        <div id="topIps" style="max-height:300px;overflow-y:auto;"></div>
+      </div>
     </div>
     
     <div class="recent-calls">
@@ -358,7 +415,7 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
   </div>
   
   <script>
-    let toolChart, hourlyChart;
+    let toolChart, hourlyChart, clientChart;
     
     async function fetchData() {
       // Get base path from current URL (handles nginx reverse proxy paths like /github/)
@@ -429,6 +486,40 @@ app.get('/analytics/dashboard', (req: Request, res: Response) => {
           plugins: { legend: { display: false } }
         }
       });
+      
+      // Client/User Agent chart
+      const clientLabels = Object.keys(data.clients.byUserAgent).slice(0, 8);
+      const clientValues = Object.values(data.clients.byUserAgent).slice(0, 8);
+      
+      if (clientChart) clientChart.destroy();
+      clientChart = new Chart(document.getElementById('clientChart'), {
+        type: 'bar',
+        data: {
+          labels: clientLabels,
+          datasets: [{
+            label: 'Requests',
+            data: clientValues,
+            backgroundColor: ['#a371f7', '#58a6ff', '#3fb950', '#f0883e', '#f85149', '#8b949e', '#6e7681', '#484f58']
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          scales: {
+            x: { beginAtZero: true, ticks: { color: '#8b949e' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+            y: { ticks: { color: '#8b949e' }, grid: { display: false } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+      
+      // Top IPs list
+      const topIps = Object.entries(data.clients.byIp).slice(0, 10);
+      document.getElementById('topIps').innerHTML = topIps.map(([ip, count]) => \`
+        <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="color:#e6edf3;font-family:monospace;font-size:0.875rem;">\${ip}</span>
+          <span style="color:#58a6ff;font-weight:500;">\${count}</span>
+        </div>
+      \`).join('') || '<p style="color:#8b949e;text-align:center;padding:20px;">No IP data</p>';
     }
     
     function updateRecentCalls(data) {
