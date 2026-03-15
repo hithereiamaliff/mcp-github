@@ -320,7 +320,13 @@ async function resolveUserKeyWithKeyService(userKey: string): Promise<string> {
   }
 
   const data = await response.json();
-  const token = data.github_token || data.githubToken || data.token;
+  const token =
+    data.github_token ||
+    data.githubToken ||
+    data.token ||
+    data.credentials?.github_token ||
+    data.credentials?.githubToken ||
+    data.credentials?.token;
   if (!token) {
     throw new HttpError(502, 'malformed_response', 'Key service response missing GitHub token');
   }
