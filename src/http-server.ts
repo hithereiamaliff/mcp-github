@@ -35,6 +35,7 @@ const KEY_SERVICE_URL = process.env.KEY_SERVICE_URL || '';
 const KEY_SERVICE_TOKEN = process.env.KEY_SERVICE_TOKEN || '';
 const ANALYTICS_DIR = process.env.ANALYTICS_DIR || '/app/data';
 const ANALYTICS_FILE = path.join(ANALYTICS_DIR, 'analytics.json');
+const PUBLIC_BASE_PATH = normalizePublicBasePath(process.env.PUBLIC_BASE_PATH || '');
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*')
   .split(',')
   .map(origin => origin.trim())
@@ -73,6 +74,18 @@ function maskValue(value?: string): string | undefined {
   if (!value) return undefined;
   if (value.length <= 8) return '***';
   return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function normalizePublicBasePath(basePath: string): string {
+  const trimmed = basePath.trim();
+  if (!trimmed || trimmed === '/') return '';
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.replace(/\/+$/, '');
+}
+
+function withPublicBasePath(route: string): string {
+  return `${PUBLIC_BASE_PATH}${route}`;
 }
 
 function hashIp(ip: string): string {
@@ -364,7 +377,7 @@ function buildServerCard() {
     },
     transport: {
       type: 'streamable-http',
-      endpoint: '/mcp',
+      endpoint: withPublicBasePath('/mcp'),
     },
     authentication: {
       required: true,
@@ -568,11 +581,12 @@ app.get('/', (_req: Request, res: Response) => {
     transport: 'streamable-http',
     protocolVersion: MCP_PROTOCOL_VERSION,
     endpoints: {
-      mcp: '/mcp',
-      health: '/health',
+      mcp: withPublicBasePath('/mcp'),
+      health: withPublicBasePath('/health'),
       discovery: '/.well-known/mcp/server-card.json',
-      analytics: '/analytics',
-      analyticsDashboard: '/analytics/dashboard',
+      analytics: withPublicBasePath('/analytics'),
+      analyticsDashboard: withPublicBasePath('/analytics/dashboard'),
+      diagnostics: withPublicBasePath('/mcp-debug/open'),
     },
     documentation: 'https://github.com/hithereiamaliff/mcp-github',
   });
@@ -1033,15 +1047,16 @@ app.listen(PORT, HOST, () => {
   console.log('GitHub MCP Server (Streamable HTTP) v2.0.0');
   console.log('='.repeat(60));
   console.log(`Server: http://${HOST}:${PORT}`);
-  console.log(`MCP endpoint: /mcp (self-hosted), /mcp/:userKey (hosted)`);
-  console.log(`Health: /health`);
+  console.log(`MCP endpoint: ${withPublicBasePath('/mcp')} (self-hosted), ${withPublicBasePath('/mcp/:userKey')} (hosted)`);
+  console.log(`Health: ${withPublicBasePath('/health')}`);
   console.log(`Discovery: /.well-known/mcp/server-card.json`);
-  console.log(`Analytics: /analytics/dashboard`);
-  console.log(`Diagnostics: ${ENABLE_MCP_DIAGNOSTICS ? '/mcp-debug/open (enabled)' : 'disabled'}`);
-  console.log(`Smithery: ${ENABLE_SMITHERY_ENDPOINT ? '/smithery/mcp (enabled)' : 'disabled'}`);
+  console.log(`Analytics: ${withPublicBasePath('/analytics/dashboard')}`);
+  console.log(`Diagnostics: ${ENABLE_MCP_DIAGNOSTICS ? `${withPublicBasePath('/mcp-debug/open')} (enabled)` : 'disabled'}`);
+  console.log(`Smithery: ${ENABLE_SMITHERY_ENDPOINT ? `${withPublicBasePath('/smithery/mcp')} (enabled)` : 'disabled'}`);
   console.log(`HTTP tracing: ${MCP_TRACE_HTTP ? 'enabled' : 'disabled'}`);
   console.log(`Self-hosted auth: ${MCP_API_KEY ? 'enabled' : 'disabled (set MCP_API_KEY to enable /mcp and /analytics)'}`);
   console.log(`Key service: ${KEY_SERVICE_URL ? 'configured' : 'not configured'}`);
+  console.log(`Public base path: ${PUBLIC_BASE_PATH || '/'}`);
   console.log(`CORS origins: ${ALLOW_ALL_ORIGINS ? '*' : ALLOWED_ORIGINS.join(', ')}`);
   console.log('='.repeat(60));
 });

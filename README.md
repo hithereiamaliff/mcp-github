@@ -31,6 +31,7 @@ Use header-based auth on `/github/mcp`:
 ```
 
 `MCP_API_KEY` must be configured on the server or self-hosted `/mcp` requests will be rejected.
+For deployments mounted under `/github`, set `PUBLIC_BASE_PATH=/github` so the server card advertises the correct public endpoint.
 
 ### Option 2: Hosted key-service mode
 
@@ -179,6 +180,7 @@ https://mcp.techmavie.digital/.well-known/mcp/server-card.json
 | `KEY_SERVICE_URL` | unset | hosted key-service resolver URL |
 | `KEY_SERVICE_TOKEN` | unset | hosted key-service bearer token |
 | `ALLOWED_ORIGINS` | `*` | comma-separated CORS allowlist |
+| `PUBLIC_BASE_PATH` | unset | public reverse-proxy mount path such as `/github` |
 | `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version reported by HTTP server |
 | `MCP_TRACE_HTTP` | `false` | enable sanitized request tracing |
 | `ENABLE_MCP_DIAGNOSTICS` | `false` | enable `/mcp-debug/open` |

@@ -44,6 +44,7 @@ Optional:
 
 ```env
 ALLOWED_ORIGINS=https://claude.ai,https://your-domain.com
+PUBLIC_BASE_PATH=/github
 MCP_TRACE_HTTP=false
 ENABLE_MCP_DIAGNOSTICS=false
 ENABLE_SMITHERY_ENDPOINT=false
@@ -208,6 +209,7 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here mcp-github
 | `KEY_SERVICE_URL` | unset | hosted key-service URL |
 | `KEY_SERVICE_TOKEN` | unset | hosted key-service bearer token |
 | `ALLOWED_ORIGINS` | `*` | comma-separated CORS allowlist |
+| `PUBLIC_BASE_PATH` | unset | public reverse-proxy mount path such as `/github` |
 | `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version |
 | `MCP_TRACE_HTTP` | `false` | sanitized request tracing |
 | `ENABLE_MCP_DIAGNOSTICS` | `false` | diagnostics endpoint |
