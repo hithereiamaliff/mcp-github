@@ -19,8 +19,20 @@ export function registerIssueTools(server: McpServer, octokit: Octokit) {
 					repo,
 					issue_number,
 				})
+				const i = response.data
+				let text = `**#${i.number}: ${i.title}**\n`
+				text += `State: ${i.state}\n`
+				text += `URL: ${i.html_url}\n`
+				text += `Author: ${i.user?.login || "unknown"}\n`
+				text += `Created: ${i.created_at}\n`
+				text += `Updated: ${i.updated_at}\n`
+				if (i.assignees && i.assignees.length > 0) text += `Assignees: ${i.assignees.map(a => a.login).join(", ")}\n`
+				if (i.labels && i.labels.length > 0) text += `Labels: ${i.labels.map(l => typeof l === "string" ? l : l.name).join(", ")}\n`
+				if (i.milestone) text += `Milestone: ${i.milestone.title}\n`
+				text += `Comments: ${i.comments}\n`
+				if (i.body) text += `\n---\n${i.body}\n`
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text }],
 				}
 			} catch (e: any) {
 				return {
@@ -48,8 +60,9 @@ export function registerIssueTools(server: McpServer, octokit: Octokit) {
 					issue_number,
 					body,
 				})
+				const c = response.data
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `Comment added to #${issue_number}\nURL: ${c.html_url}\nID: ${c.id}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -184,8 +197,14 @@ export function registerIssueTools(server: McpServer, octokit: Octokit) {
 					labels,
 					milestone,
 				})
+				const i = response.data
+				let text = `Issue created: **#${i.number}: ${i.title}**\n`
+				text += `URL: ${i.html_url}\n`
+				text += `State: ${i.state}\n`
+				if (i.labels && i.labels.length > 0) text += `Labels: ${i.labels.map(l => typeof l === "string" ? l : l.name).join(", ")}\n`
+				if (i.assignees && i.assignees.length > 0) text += `Assignees: ${i.assignees.map(a => a.login).join(", ")}\n`
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text }],
 				}
 			} catch (e: any) {
 				return {
@@ -340,8 +359,13 @@ export function registerIssueTools(server: McpServer, octokit: Octokit) {
 					assignees,
 					milestone,
 				})
+				const i = response.data
+				let text = `Issue updated: **#${i.number}: ${i.title}**\n`
+				text += `URL: ${i.html_url}\n`
+				text += `State: ${i.state}\n`
+				text += `Updated: ${i.updated_at}\n`
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text }],
 				}
 			} catch (e: any) {
 				return {

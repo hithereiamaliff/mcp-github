@@ -1,171 +1,240 @@
 # GitHub MCP Server
 
-MCP (Model Context Protocol) server for interacting with GitHub.
+Model Context Protocol server for GitHub repositories, issues, pull requests, branches, tags, commits, and search.
 
-> **Note:** This is a fork of [smithery-ai/mcp-servers/github](https://github.com/smithery-ai/mcp-servers/tree/main/github).
+It ships with 34 tools across 5 categories and supports:
 
-### What's Changed in This Fork
+- CLI/stdio usage for local MCP clients
+- self-hosted Streamable HTTP deployments
+- hosted key-service mode with `usr_...` user keys
+- an optional Smithery endpoint
 
-- **Self-hosted VPS deployment** - Added Streamable HTTP transport for hosting on your own server
-- **Docker support** - Dockerfile and docker-compose.yml for containerized deployment
-- **Nginx reverse proxy config** - Ready-to-use nginx location block
-- **GitHub Actions auto-deploy** - Automatic deployment on push to main
-- **Analytics dashboard** - Built-in usage tracking and visual dashboard
-- **Flexible authentication** - Support for token via query param, header, or environment variable
+## Quick Start
 
-**MCP Endpoint:** `https://mcp.techmavie.digital/github/mcp`
+### Option 1: Self-hosted HTTP
 
-**Analytics Dashboard:** [`https://mcp.techmavie.digital/github/analytics/dashboard`](https://mcp.techmavie.digital/github/analytics/dashboard)
-
-## Quick Start (Hosted Server)
-
-The easiest way to use this MCP server is via the hosted endpoint. **No installation required!**
-
-### Client Configuration
-
-For Claude Desktop / Cursor / Windsurf, add to your MCP configuration:
+Use header-based auth on `/github/mcp`:
 
 ```json
 {
   "mcpServers": {
     "github": {
       "transport": "streamable-http",
-      "url": "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN"
+      "url": "https://mcp.techmavie.digital/github/mcp",
+      "headers": {
+        "X-API-Key": "YOUR_MCP_API_KEY",
+        "X-GitHub-Token": "YOUR_GITHUB_TOKEN"
+      }
     }
   }
 }
 ```
 
-> **Note:** Replace `YOUR_GITHUB_TOKEN` with your [GitHub Personal Access Token](https://github.com/settings/personal-access-tokens).
+`MCP_API_KEY` must be configured on the server or self-hosted `/mcp` requests will be rejected.
 
-### Test with MCP Inspector
+### Option 2: Hosted key-service mode
 
-```bash
-npx @modelcontextprotocol/inspector
-# Select "Streamable HTTP"
-# Enter URL: https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN
+Preferred path-based form:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "streamable-http",
+      "url": "https://mcp.techmavie.digital/github/mcp/usr_YOUR_USER_KEY"
+    }
+  }
+}
 ```
 
-### Test with curl
+Compatibility query form:
 
-```bash
-# List all available tools
-curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-
-# Call the hello tool
-curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hello","arguments":{}}}'
+```text
+https://mcp.techmavie.digital/github/mcp?api_key=usr_YOUR_USER_KEY
 ```
 
-## Authentication
-
-The server supports three ways to provide a GitHub token:
-
-1. **Query Parameter** (recommended): `?token=YOUR_TOKEN`
-2. **Header**: `X-GitHub-Token: YOUR_TOKEN`
-3. **Environment Variable**: `GITHUB_PERSONAL_ACCESS_TOKEN` (server default)
-
-## Available Tools
-
-### Repository Tools
-Tools for managing GitHub repositories:
-
-- `get_commit`: Get details for a specific commit
-- `list_commits`: Get list of commits in a branch
-- `list_branches`: List branches in a repository
-- `create_or_update_file`: Create or update a file in a repository
-- `create_repository`: Create a new GitHub repository
-- `get_file_contents`: Get contents of a file or directory
-- `fork_repository`: Fork a repository to your account or organization
-
-### Search Tools
-
-Tools for searching GitHub:
-
-- `search_repositories`: Search for GitHub repositories
-- `search_code`: Search for code across GitHub repositories
-- `search_users`: Search for GitHub users
-
-### Issue Tools
-
-Tools for managing GitHub issues:
-
-- `get_issue`: Get details of a specific issue
-- `add_issue_comment`: Add a comment to an issue
-- `search_issues`: Search for issues across repositories
-- `create_issue`: Create a new issue
-- `list_issues`: List issues in a repository
-- `update_issue`: Update an existing issue
-
-### Pull Request Tools
-
-Tools for managing pull requests:
-
-- `get_pull_request`: Get details of a specific pull request
-- `update_pull_request`: Update an existing pull request
-- `list_pull_requests`: List pull requests in a repository
-- `merge_pull_request`: Merge a pull request
-- `get_pull_request_files`: Get files changed in a pull request
-- `get_pull_request_status`: Get the status of a pull request
-- `get_pull_request_review_comments`: Get review comments (line-by-line code comments) for a pull request
-- `create_pull_request_review_comment`: Create a review comment on a pull request
-
-## Self-Hosting (VPS)
-
-If you prefer to run your own instance, see [deploy/DEPLOYMENT.md](deploy/DEPLOYMENT.md) for detailed VPS deployment instructions with Docker and Nginx.
+### Option 3: CLI / stdio
 
 ```bash
-# Using Docker
-docker compose up -d --build
-
-# Or run directly
-npm run build:tsc
-npm run start:http
+npm install -g mcp-github
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here mcp-github
 ```
+
+Example client config:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "mcp-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Option 4: Legacy query-token mode
+
+This is still supported for explicit requests only and is deprecated:
+
+```text
+https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN
+```
+
+The server no longer falls back to its own `GITHUB_PERSONAL_ACCESS_TOKEN` for bare `/mcp` HTTP requests.
+
+## Authentication Modes
+
+| Mode | Endpoint | Client auth |
+|------|----------|-------------|
+| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` headers |
+| Hosted key-service | `POST /github/mcp/usr_...` | user key in path |
+| Hosted key-service compatibility | `POST /github/mcp?api_key=usr_...` | user key in query string |
+| Smithery | `POST /github/smithery/mcp` | `X-GitHub-Token` header |
+| Legacy | `POST /github/mcp?token=...` | explicit query token, deprecated |
+| CLI | stdio | `GITHUB_PERSONAL_ACCESS_TOKEN` env var |
+
+## Tool Categories
+
+### Search Tools (3)
+
+- `search_repositories`
+- `search_code`
+- `search_users`
+
+### Repository Tools (12)
+
+- `get_repository`
+- `get_commit`
+- `list_commits`
+- `list_branches`
+- `create_or_update_file`
+- `create_repository`
+- `get_file_contents`
+- `fork_repository`
+- `create_branch`
+- `list_tags`
+- `get_tag`
+- `push_files`
+
+### Issue Tools (7)
+
+- `get_issue`
+- `add_issue_comment`
+- `search_issues`
+- `create_issue`
+- `list_issues`
+- `update_issue`
+- `get_issue_comments`
+
+### Pull Request Tools (11)
+
+- `get_pull_request`
+- `update_pull_request`
+- `list_pull_requests`
+- `merge_pull_request`
+- `get_pull_request_files`
+- `get_pull_request_status`
+- `update_pull_request_branch`
+- `get_pull_request_comments`
+- `create_pull_request`
+- `get_pull_request_review_comments`
+- `create_pull_request_review_comment`
+
+### Utility Tools (1)
+
+- `hello`
+
+## Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | health check |
+| `/mcp` | POST | self-hosted endpoint |
+| `/mcp/:userKey` | POST | hosted key-service endpoint |
+| `/smithery/mcp` | POST | Smithery endpoint when enabled |
+| `/mcp-debug/open` | POST | diagnostics endpoint when enabled |
+| `/.well-known/mcp/server-card.json` | GET | root-level discovery metadata |
+| `/analytics` | GET | analytics JSON, requires `X-API-Key` |
+| `/analytics/tools` | GET | analytics tool breakdown, requires `X-API-Key` |
+| `/analytics/dashboard` | GET | analytics dashboard shell |
+
+If this server is mounted under `/github`, the server-card route still lives at the host root:
+
+```text
+https://mcp.techmavie.digital/.well-known/mcp/server-card.json
+```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | HTTP port |
+| `HOST` | `0.0.0.0` | bind address |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | unset | CLI/stdio token only |
+| `MCP_API_KEY` | unset | required for self-hosted `/mcp` and analytics |
+| `KEY_SERVICE_URL` | unset | hosted key-service resolver URL |
+| `KEY_SERVICE_TOKEN` | unset | hosted key-service bearer token |
+| `ALLOWED_ORIGINS` | `*` | comma-separated CORS allowlist |
+| `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version reported by HTTP server |
+| `MCP_TRACE_HTTP` | `false` | enable sanitized request tracing |
+| `ENABLE_MCP_DIAGNOSTICS` | `false` | enable `/mcp-debug/open` |
+| `ENABLE_SMITHERY_ENDPOINT` | `false` | enable `/smithery/mcp` |
+| `ANALYTICS_DIR` | `/app/data` | analytics storage directory |
 
 ## Local Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Run HTTP server in development mode
 npm run dev:http
+```
 
-# Or build and run production version
+Build and run production HTTP mode:
+
+```bash
 npm run build:tsc
 npm run start:http
+```
 
-# Test health endpoint
-curl http://localhost:8080/health
+Run CLI mode:
+
+```bash
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here npm run cli
 ```
 
 ## Project Structure
 
+```text
+mcp-github/
+|-- src/
+|   |-- index.ts
+|   |-- http-server.ts
+|   |-- cli.ts
+|   |-- tools/
+|   |-- resources/
+|-- deploy/
+|   |-- DEPLOYMENT.md
+|   |-- nginx-mcp.conf
+|-- .github/workflows/
+|-- docker-compose.yml
+|-- Dockerfile
+|-- .env.sample
+|-- package.json
+|-- tsconfig.json
+`-- README.md
 ```
-├── src/
-│   ├── index.ts              # Main MCP server entry point (Smithery)
-│   ├── http-server.ts        # Streamable HTTP server for VPS
-│   └── tools/
-│       ├── issues.ts         # Issue management tools
-│       ├── pullrequests.ts   # Pull request tools
-│       ├── repositories.ts   # Repository tools
-│       └── search.ts         # Search tools
-├── deploy/
-│   ├── DEPLOYMENT.md         # VPS deployment guide
-│   └── nginx-mcp.conf        # Nginx reverse proxy config
-├── .github/
-│   └── workflows/
-│       └── deploy-vps.yml    # GitHub Actions auto-deploy
-├── docker-compose.yml        # Docker deployment config
-├── Dockerfile                # Container build config
-├── package.json              # Project dependencies
-├── tsconfig.json             # TypeScript configuration
-└── README.md                 # This file
-```
+
+## Security Notes
+
+- Self-hosted `/mcp` fails closed when `MCP_API_KEY` is missing.
+- Analytics fail closed when `MCP_API_KEY` is missing.
+- Bare `/mcp` requests no longer inherit the server's own PAT.
+- Recent analytics store hashed client IPs only.
+- Request-scoped MCP servers and transports are used for HTTP requests.
+- `?token=` remains available only as an explicit deprecated compatibility path.
 
 ## License
 

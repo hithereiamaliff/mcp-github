@@ -1,10 +1,13 @@
 {
 	"name": "mcp-github",
-	"version": "1.0.0",
-	"description": "MCP server for interacting with GitHub",
+	"version": "2.0.0",
+	"description": "MCP server for interacting with GitHub - supports CLI, self-hosted VPS, Smithery, and hosted key-service modes",
 	"license": "MIT",
 	"author": "hithereiamaliff",
 	"type": "module",
+	"bin": {
+		"mcp-github": "dist/cli.js"
+	},
 	"files": [
 		"dist"
 	],
@@ -14,8 +17,24 @@
 		"dev": "smithery dev",
 		"dev:http": "npx tsx src/http-server.ts",
 		"start:http": "node dist/http-server.js",
+		"cli": "node dist/cli.js",
 		"check": "npx @biomejs/biome check --write --unsafe"
 	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/hithereiamaliff/mcp-github.git"
+	},
+	"keywords": [
+		"mcp",
+		"model-context-protocol",
+		"github",
+		"github-api",
+		"ai-tools"
+	],
+	"bugs": {
+		"url": "https://github.com/hithereiamaliff/mcp-github/issues"
+	},
+	"homepage": "https://github.com/hithereiamaliff/mcp-github#readme",
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.18.2",
 		"@smithery/sdk": "^1.6.4",

@@ -1,269 +1,238 @@
-# VPS Deployment Guide for GitHub MCP
+# GitHub MCP VPS Deployment Guide
 
-This guide explains how to deploy the GitHub MCP server on your VPS at `mcp.techmavie.digital/github`.
+Deploy the GitHub MCP server behind Nginx with Docker and Streamable HTTP.
 
-## Prerequisites
+This guide assumes the server is mounted at:
 
-- VPS with Ubuntu/Debian
-- Docker and Docker Compose installed
-- Nginx installed
-- Domain `mcp.techmavie.digital` pointing to your VPS IP
-- SSL certificate (via Certbot/Let's Encrypt)
-- GitHub Personal Access Token (optional, can be provided per-request)
-
-## Architecture
-
+```text
+https://mcp.techmavie.digital/github
 ```
-Client (Claude, Cursor, etc.)
-    ↓ HTTPS
-https://mcp.techmavie.digital/github/mcp
-    ↓
-Nginx (SSL termination + reverse proxy)
-    ↓ HTTP
-Docker Container (port 8084 → 8080)
-    ↓
-GitHub API
+
+## Auth Modes
+
+| Mode | Endpoint | Required client auth |
+|------|----------|----------------------|
+| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` |
+| Hosted key-service | `POST /github/mcp/usr_...` | hosted user key in path |
+| Hosted compatibility | `POST /github/mcp?api_key=usr_...` | hosted user key in query |
+| Smithery | `POST /github/smithery/mcp` | `X-GitHub-Token` |
+| Legacy | `POST /github/mcp?token=...` | explicit deprecated query token |
+| Diagnostics | `POST /github/mcp-debug/open` | none, when enabled |
+
+## Required Environment
+
+Create `.env` from `.env.sample`:
+
+```bash
+cp .env.sample .env
 ```
+
+Minimum self-hosted configuration:
+
+```env
+MCP_API_KEY=your_secure_api_key
+```
+
+Hosted key-service configuration:
+
+```env
+KEY_SERVICE_URL=https://your-key-service.example.com/internal/resolve
+KEY_SERVICE_TOKEN=your_bearer_token
+```
+
+Optional:
+
+```env
+ALLOWED_ORIGINS=https://claude.ai,https://your-domain.com
+MCP_TRACE_HTTP=false
+ENABLE_MCP_DIAGNOSTICS=false
+ENABLE_SMITHERY_ENDPOINT=false
+ANALYTICS_DIR=/app/data
+```
+
+`GITHUB_PERSONAL_ACCESS_TOKEN` is for CLI/stdio usage only. The HTTP server does not use it as an implicit fallback for `/mcp`.
 
 ## Deployment Steps
 
-### 1. SSH into your VPS
+### 1. Prepare the VPS
 
 ```bash
 ssh root@your-vps-ip
-```
-
-### 2. Create directory for the MCP server
-
-```bash
 mkdir -p /opt/mcp-servers/github
 cd /opt/mcp-servers/github
-```
-
-### 3. Clone the repository
-
-```bash
 git clone https://github.com/hithereiamaliff/mcp-github.git .
+mkdir -p /opt/mcp-credentials
 ```
 
-### 4. Create environment file (optional)
-
-If you want a default GitHub token for all requests:
-
-```bash
-nano .env
-```
-
-Add your GitHub Personal Access Token:
-```env
-GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here
-```
-
-> **Note:** Users can also provide their own token via `?token=` query parameter or `X-GitHub-Token` header.
-
-### 5. Build and start the Docker container
+### 2. Start the container
 
 ```bash
 docker compose up -d --build
-```
-
-### 6. Verify the container is running
-
-```bash
-docker compose ps
 docker compose logs -f
 ```
 
-### 7. Test the health endpoint
+### 3. Configure Nginx
+
+Add the contents of [nginx-mcp.conf](./nginx-mcp.conf) to your Nginx server block:
 
 ```bash
-curl http://localhost:8084/health
-```
-
-### 8. Configure Nginx
-
-Add the location block from `deploy/nginx-mcp.conf` to your existing nginx config for `mcp.techmavie.digital`:
-
-```bash
-# Edit your existing nginx config
 sudo nano /etc/nginx/sites-available/mcp.techmavie.digital
-
-# Add the location block from deploy/nginx-mcp.conf inside the server block
-
-# Test nginx config
 sudo nginx -t
-
-# Reload nginx
 sudo systemctl reload nginx
 ```
 
-### 9. Test the MCP endpoint
+## Verification Sequence
+
+Run these in order.
+
+### 1. Health check
 
 ```bash
-# Test health endpoint through nginx
 curl https://mcp.techmavie.digital/github/health
+```
 
-# Test MCP endpoint (with token)
-curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN" \
+### 2. Root-level server card
+
+```bash
+curl https://mcp.techmavie.digital/.well-known/mcp/server-card.json
+```
+
+### 3. Diagnostics, if enabled
+
+```bash
+curl -X POST "https://mcp.techmavie.digital/github/mcp-debug/open" \
   -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}'
+```
+
+### 4. Self-hosted header auth
+
+```bash
+curl -X POST "https://mcp.techmavie.digital/github/mcp" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "X-API-Key: YOUR_MCP_API_KEY" \
+  -H "X-GitHub-Token: YOUR_GITHUB_TOKEN" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-## Client Configuration
+### 5. Hosted key-service path mode
 
-### For Claude Desktop / Cursor / Windsurf
+```bash
+curl -X POST "https://mcp.techmavie.digital/github/mcp/usr_YOUR_USER_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
 
-Add to your MCP configuration:
+### 6. Hosted key-service query compatibility mode
+
+```bash
+curl -X POST "https://mcp.techmavie.digital/github/mcp?api_key=usr_YOUR_USER_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+### 7. Legacy query-token mode
+
+```bash
+curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+### 8. Analytics protection
+
+Without a key:
+
+```bash
+curl https://mcp.techmavie.digital/github/analytics
+```
+
+With a key:
+
+```bash
+curl https://mcp.techmavie.digital/github/analytics \
+  -H "X-API-Key: YOUR_MCP_API_KEY"
+```
+
+## Client Examples
+
+### Self-hosted
 
 ```json
 {
   "mcpServers": {
     "github": {
       "transport": "streamable-http",
-      "url": "https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN"
+      "url": "https://mcp.techmavie.digital/github/mcp",
+      "headers": {
+        "X-API-Key": "YOUR_MCP_API_KEY",
+        "X-GitHub-Token": "YOUR_GITHUB_TOKEN"
+      }
     }
   }
 }
 ```
 
-### For MCP Inspector
+### Hosted key-service
 
-```bash
-npx @modelcontextprotocol/inspector
-# Select "Streamable HTTP"
-# Enter URL: https://mcp.techmavie.digital/github/mcp?token=YOUR_GITHUB_TOKEN
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "streamable-http",
+      "url": "https://mcp.techmavie.digital/github/mcp/usr_YOUR_USER_KEY"
+    }
+  }
+}
 ```
 
-## Authentication
-
-The server supports three ways to provide a GitHub token:
-
-1. **Query Parameter** (recommended for clients): `?token=YOUR_TOKEN`
-2. **Header**: `X-GitHub-Token: YOUR_TOKEN`
-3. **Environment Variable**: `GITHUB_PERSONAL_ACCESS_TOKEN` (server default)
-
-If no token is provided, the server returns a 401 error.
-
-## Management Commands
-
-### View logs
+### CLI
 
 ```bash
-cd /opt/mcp-servers/github
-docker compose logs -f
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here mcp-github
 ```
 
-### Restart the server
-
-```bash
-docker compose restart
-```
-
-### Update to latest version
-
-```bash
-git pull origin main
-docker compose up -d --build
-```
-
-### Stop the server
-
-```bash
-docker compose down
-```
-
-## GitHub Actions Auto-Deploy
-
-The repository includes a GitHub Actions workflow (`.github/workflows/deploy-vps.yml`) that automatically deploys to your VPS when you push to the `main` branch.
-
-### Required GitHub Secrets
-
-Set these in your repository settings (Settings → Secrets and variables → Actions):
-
-| Secret | Description |
-|--------|-------------|
-| `VPS_HOST` | Your VPS IP address |
-| `VPS_USERNAME` | SSH username (e.g., root) |
-| `VPS_SSH_KEY` | Your private SSH key |
-| `VPS_PORT` | SSH port (usually 22) |
-
-## Environment Variables
+## Environment Reference
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 8080 | HTTP server port (internal) |
-| `HOST` | 0.0.0.0 | Bind address |
-| `GITHUB_PERSONAL_ACCESS_TOKEN` | (optional) | Default GitHub token |
+| `PORT` | `8080` | internal HTTP port |
+| `HOST` | `0.0.0.0` | bind address |
+| `GITHUB_PERSONAL_ACCESS_TOKEN` | unset | CLI/stdio token only |
+| `MCP_API_KEY` | unset | required for self-hosted `/mcp` and analytics |
+| `KEY_SERVICE_URL` | unset | hosted key-service URL |
+| `KEY_SERVICE_TOKEN` | unset | hosted key-service bearer token |
+| `ALLOWED_ORIGINS` | `*` | comma-separated CORS allowlist |
+| `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version |
+| `MCP_TRACE_HTTP` | `false` | sanitized request tracing |
+| `ENABLE_MCP_DIAGNOSTICS` | `false` | diagnostics endpoint |
+| `ENABLE_SMITHERY_ENDPOINT` | `false` | Smithery endpoint |
+| `ANALYTICS_DIR` | `/app/data` | analytics storage directory |
 
-## Port Allocation
+## Useful Commands
 
-Based on your existing MCP servers:
-- **8080** - Malaysia Transit MCP
-- **3001** - Keywords Everywhere MCP
-- **8083** - Malaysia Open Data MCP
-- **8084** - GitHub MCP (this server)
+```bash
+docker compose logs -f
+docker compose ps
+docker compose restart
+docker compose up -d --build
+docker compose down
+```
 
 ## Troubleshooting
 
-### Container not starting
+- `401` on `/mcp`: verify both `X-API-Key` and `X-GitHub-Token`.
+- `503` on `/mcp`: `MCP_API_KEY` is not configured, so self-hosted mode is disabled.
+- `503` on hosted key-service routes: check `KEY_SERVICE_URL` and `KEY_SERVICE_TOKEN`.
+- `503` on `/analytics`: `MCP_API_KEY` is not configured for analytics protection.
+- CORS failures: verify `ALLOWED_ORIGINS` includes the client origin, or leave it unset to allow `*`.
+- Empty initialize responses: enable `MCP_TRACE_HTTP=true` and test `/mcp-debug/open` first.
 
-```bash
-docker compose logs mcp-github
-```
+## GitHub Actions
 
-### Nginx 502 Bad Gateway
-
-- Check if container is running: `docker compose ps`
-- Check container logs: `docker compose logs`
-- Verify port binding: `docker port mcp-github`
-
-### Test MCP connection
-
-```bash
-# List tools
-curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-
-# Call hello tool
-curl -X POST "https://mcp.techmavie.digital/github/mcp?token=YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hello","arguments":{}}}'
-```
-
-## Available Tools
-
-The GitHub MCP server provides the following tools:
-
-### Search Tools
-- `search_repositories` - Search for GitHub repositories
-- `search_code` - Search for code across repositories
-- `search_users` - Search for GitHub users
-
-### Repository Tools
-- `get_repository` - Get detailed repository information
-- `list_branches` - List repository branches
-- `get_file_contents` - Get file contents from a repository
-- `create_repository` - Create a new repository
-- `fork_repository` - Fork a repository
-
-### Issue Tools
-- `list_issues` - List repository issues
-- `get_issue` - Get issue details
-- `create_issue` - Create a new issue
-- `update_issue` - Update an existing issue
-- `add_issue_comment` - Add a comment to an issue
-
-### Pull Request Tools
-- `list_pull_requests` - List repository pull requests
-- `get_pull_request` - Get pull request details
-- `create_pull_request` - Create a new pull request
-- `merge_pull_request` - Merge a pull request
-
-## Security Notes
-
-- The MCP server runs behind nginx with SSL
-- GitHub tokens can be provided per-request (recommended)
-- CORS is configured to allow all origins (required for MCP clients)
-- Rate limiting can be added at nginx level if needed
+The repository already includes `.github/workflows/deploy-vps.yml` for deploy-on-push to `main`.

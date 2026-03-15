@@ -1,8 +1,6 @@
 # GitHub MCP Server - Docker Compose
 # For self-hosting on VPS at mcp.techmavie.digital/github
 
-version: '3.8'
-
 services:
   mcp-github:
     build: .
@@ -13,11 +11,20 @@ services:
     environment:
       - PORT=8080
       - HOST=0.0.0.0
-      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
       - NODE_ENV=production
-      - ANALYTICS_FILE=/app/data/github-mcp-analytics.json
+      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
+      - MCP_API_KEY=${MCP_API_KEY:-}
+      - KEY_SERVICE_URL=${KEY_SERVICE_URL:-}
+      - KEY_SERVICE_TOKEN=${KEY_SERVICE_TOKEN:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - MCP_PROTOCOL_VERSION=${MCP_PROTOCOL_VERSION:-2025-11-25}
+      - MCP_TRACE_HTTP=${MCP_TRACE_HTTP:-false}
+      - ENABLE_MCP_DIAGNOSTICS=${ENABLE_MCP_DIAGNOSTICS:-false}
+      - ENABLE_SMITHERY_ENDPOINT=${ENABLE_SMITHERY_ENDPOINT:-false}
+      - ANALYTICS_DIR=/app/data
     volumes:
       - analytics-data:/app/data
+      - /opt/mcp-credentials:/app/.credentials:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1"]
       interval: 30s

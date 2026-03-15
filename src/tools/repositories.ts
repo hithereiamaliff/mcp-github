@@ -433,8 +433,9 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 					private: isPrivate,
 					auto_init: autoInit,
 				})
+				const r = response.data
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `Repository created: **${r.full_name}**\nURL: ${r.html_url}\nVisibility: ${r.private ? "private" : "public"}\nDefault branch: ${r.default_branch}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -569,8 +570,9 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 					repo,
 					organization,
 				})
+				const r = response.data
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `Repository forked: **${r.full_name}**\nURL: ${r.html_url}\nParent: ${r.parent?.full_name || `${owner}/${repo}`}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -615,7 +617,7 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 					sha,
 				})
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `Branch created: **${branch}**\nSHA: ${response.data.object.sha}\nRef: ${response.data.ref}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -694,7 +696,7 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 	// Tool: Get Tag
 	server.tool(
 		"get_tag",
-		"Get details about a specific git tag in a GitHub repository",
+		"Get details about a specific git tag in a GitHub repository (supports both annotated and lightweight tags)",
 		{
 			owner: z.string().describe("Repository owner"),
 			repo: z.string().describe("Repository name"),
@@ -709,14 +711,45 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 					ref: `tags/${tag}`,
 				})
 				const sha = refResp.data.object.sha
-				// Get the tag object
-				const tagResp = await octokit.rest.git.getTag({
-					owner,
-					repo,
-					tag_sha: sha,
-				})
-				return {
-					content: [{ type: "text", text: JSON.stringify(tagResp.data) }],
+				const refType = refResp.data.object.type
+
+				if (refType === "tag") {
+					// Annotated tag — fetch the tag object
+					const tagResp = await octokit.rest.git.getTag({
+						owner,
+						repo,
+						tag_sha: sha,
+					})
+					const t = tagResp.data
+					let text = `**Tag: ${t.tag}**\n`
+					text += `Type: annotated\n`
+					text += `SHA: ${t.sha}\n`
+					if (t.message) text += `Message: ${t.message.trim()}\n`
+					if (t.tagger) {
+						text += `Tagger: ${t.tagger.name} <${t.tagger.email}>\n`
+						text += `Date: ${t.tagger.date}\n`
+					}
+					text += `Target: ${t.object.sha} (${t.object.type})\n`
+					return {
+						content: [{ type: "text", text }],
+					}
+				} else {
+					// Lightweight tag — ref points directly to a commit
+					const commitResp = await octokit.rest.git.getCommit({
+						owner,
+						repo,
+						commit_sha: sha,
+					})
+					const c = commitResp.data
+					let text = `**Tag: ${tag}**\n`
+					text += `Type: lightweight\n`
+					text += `Commit: ${c.sha}\n`
+					text += `Message: ${c.message.trim()}\n`
+					text += `Author: ${c.author.name} <${c.author.email}>\n`
+					text += `Date: ${c.author.date}\n`
+					return {
+						content: [{ type: "text", text }],
+					}
 				}
 			} catch (e: any) {
 				return {
@@ -793,7 +826,7 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 				})
 
 				return {
-					content: [{ type: "text", text: JSON.stringify(updatedRef.data) }],
+					content: [{ type: "text", text: `Files pushed successfully to **${owner}/${repo}** branch \`${branch}\`\nCommit SHA: ${newCommit.data.sha}\nMessage: ${message}\nFiles: ${files.map((f: any) => f.path).join(", ")}` }],
 				}
 			} catch (e: any) {
 				return {

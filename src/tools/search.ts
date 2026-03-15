@@ -2,6 +2,52 @@ import { z } from "zod"
 import type { Octokit } from "octokit"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 
+const CODE_SEARCH_QUALIFIERS = new Set([
+	"repo",
+	"org",
+	"user",
+	"language",
+	"path",
+	"extension",
+	"filename",
+	"in",
+	"size",
+	"fork",
+])
+
+function splitSearchQuery(query: string): string[] {
+	const tokens: string[] = []
+	let current = ""
+	let inQuotes = false
+
+	for (const char of query) {
+		if (char === "\"") {
+			inQuotes = !inQuotes
+			current += char
+			continue
+		}
+
+		if (/\s/.test(char) && !inQuotes) {
+			if (current) tokens.push(current)
+			current = ""
+			continue
+		}
+
+		current += char
+	}
+
+	if (current) tokens.push(current)
+
+	return tokens
+}
+
+function isCodeSearchQualifier(token: string): boolean {
+	const separatorIndex = token.indexOf(":")
+	if (separatorIndex <= 0) return false
+
+	return CODE_SEARCH_QUALIFIERS.has(token.slice(0, separatorIndex).toLowerCase())
+}
+
 export function registerSearchTools(server: McpServer, octokit: Octokit) {
 	// Tool: Search Repositories
 	server.tool(
@@ -82,7 +128,7 @@ export function registerSearchTools(server: McpServer, octokit: Octokit) {
 			q: z
 				.string()
 				.describe(
-					"Search query using GitHub code search syntax. Examples: 'addClass in:file language:js', 'repo:owner/name path:src/ extension:py', 'org:github extension:js', 'filename:test.py', 'user:octocat extension:rb', 'console.log path:/src/components', 'TODO in:comments'",
+					"Search query using GitHub code search syntax. Examples: 'addClass in:file language:js', 'repo:owner/name path:src/ extension:py', 'org:github extension:js', 'filename:test.py', 'user:octocat extension:rb', 'console.log path:/src/components', 'TODO in:file path:src/'",
 				),
 			sort: z
 				.enum(["indexed"])
@@ -102,6 +148,27 @@ export function registerSearchTools(server: McpServer, octokit: Octokit) {
 		},
 		async ({ q, sort, order, per_page, page }) => {
 			try {
+				const tokens = splitSearchQuery(q.trim())
+				const hasFilenameQualifier = tokens.some(token => /^filename:/i.test(token))
+				const hasSearchTerm = tokens.some(token => {
+					const normalized = token.toUpperCase()
+					if (normalized === "AND" || normalized === "OR" || normalized === "NOT") {
+						return false
+					}
+
+					return !isCodeSearchQualifier(token)
+				})
+
+				// GitHub code search requires at least one search term, unless the query is a filename-only search.
+				if (!hasSearchTerm && !hasFilenameQualifier) {
+					return {
+						content: [{
+							type: "text",
+							text: `GitHub code search needs at least one search term unless you are doing a filename-only search. Your query \`${q}\` only contains qualifiers.\n\nExamples:\n- \`handleClick repo:owner/name\`\n- \`addClass language:javascript\`\n- \`TODO path:src/\`\n- \`filename:test.py\`\n\nPlease retry with a search term, or use \`filename:\` for a filename-only search.`,
+						}],
+					}
+				}
+
 				const response = await octokit.rest.search.code({
 					q,
 					sort,
@@ -113,19 +180,31 @@ export function registerSearchTools(server: McpServer, octokit: Octokit) {
 					},
 				})
 
+				const totalCount = response.data.total_count
+
 				// Extract only essential information including text matches
 				const results = response.data.items.map(item => ({
 					repository: item.repository.full_name,
 					path: item.path,
+					url: item.html_url,
 					// Only include the first match fragment for conciseness
 					match: item.text_matches?.[0]?.fragment?.slice(0, 200) || null,
 				}))
+
+				if (results.length === 0) {
+					return {
+						content: [{
+							type: "text",
+							text: `No code results found for query: \`${q}\`\n\nTips:\n- GitHub only indexes the default branch\n- GitHub only indexes files under 384 KB in repositories with recent activity\n- Try adding or broadening qualifiers like \`repo:\`, \`org:\`, \`language:\`, or \`path:\`\n- Ensure the search term is specific enough to be indexed`,
+						}],
+					}
+				}
 
 				// Format as simple text
 				const text = results
 					.map(
 						(item, i) =>
-							`${i + 1}. **${item.repository}** / \`${item.path}\`${item.match ? `\n   \`\`\`\n   ${item.match.replace(/\n/g, " ").trim()}\n   \`\`\`\`` : ""}`,
+							`${i + 1}. **${item.repository}** / \`${item.path}\`${item.match ? `\n   \`\`\`\n   ${item.match.replace(/\n/g, " ").trim()}\n   \`\`\`` : ""}`,
 					)
 					.join("\n\n")
 
@@ -133,15 +212,43 @@ export function registerSearchTools(server: McpServer, octokit: Octokit) {
 					content: [
 						{
 							type: "text",
-							text: text
-								? `### Found ${results.length} code results:\n\n${text}`
-								: "No code results found",
+							text: `### Found ${totalCount} total code result(s), showing ${results.length}:\n\n${text}`,
 						},
 					],
 				}
 			} catch (e: any) {
+				const responseMessage =
+					e.response?.data?.message ||
+					e.response?.data?.error ||
+					e.message ||
+					String(e)
+				const errorDetails = Array.isArray(e.response?.data?.errors)
+					? e.response.data.errors
+							.map((error: any) => error.message || error.code || JSON.stringify(error))
+							.filter(Boolean)
+					: []
+
+				if (e.status === 401) {
+					return {
+						content: [{
+							type: "text",
+							text: "GitHub code search requires an authenticated GitHub token. Please retry with a valid token that can access the repositories you want to search.",
+						}],
+					}
+				}
+
+				if (e.status === 422) {
+					const detailText = errorDetails.length > 0 ? `\n\nDetails:\n- ${errorDetails.join("\n- ")}` : ""
+					return {
+						content: [{
+							type: "text",
+							text: `GitHub rejected the search query: ${responseMessage}${detailText}\n\nTry one of these fixes:\n- include at least one search term unless you are using \`filename:\`\n- verify the qualifier syntax for code search\n- if you used \`repo:\`, \`org:\`, or \`user:\`, confirm the token can access those resources`,
+						}],
+					}
+				}
+
 				return {
-					content: [{ type: "text", text: `Error: ${e.message}` }],
+					content: [{ type: "text", text: `Error: ${responseMessage}` }],
 				}
 			}
 		},

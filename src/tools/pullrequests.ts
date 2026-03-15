@@ -19,8 +19,22 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 					repo,
 					pull_number: pullNumber,
 				})
+				const pr = response.data
+				let text = `**PR #${pr.number}: ${pr.title}**\n`
+				text += `State: ${pr.state}${pr.draft ? " (draft)" : ""}${pr.merged ? " (merged)" : ""}\n`
+				text += `URL: ${pr.html_url}\n`
+				text += `Author: ${pr.user?.login || "unknown"}\n`
+				text += `Branch: ${pr.head.label} -> ${pr.base.label}\n`
+				text += `Created: ${pr.created_at}\n`
+				text += `Updated: ${pr.updated_at}\n`
+				if (pr.merged_at) text += `Merged: ${pr.merged_at}\n`
+				text += `Commits: ${pr.commits} | Changed files: ${pr.changed_files} | +${pr.additions} -${pr.deletions}\n`
+				if (pr.assignees && pr.assignees.length > 0) text += `Assignees: ${pr.assignees.map(a => a.login).join(", ")}\n`
+				if (pr.requested_reviewers && pr.requested_reviewers.length > 0) text += `Reviewers: ${pr.requested_reviewers.map((r: any) => r.login).join(", ")}\n`
+				if (pr.labels && pr.labels.length > 0) text += `Labels: ${pr.labels.map(l => l.name).join(", ")}\n`
+				if (pr.body) text += `\n---\n${pr.body}\n`
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text }],
 				}
 			} catch (e: any) {
 				return {
@@ -68,8 +82,9 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 					base,
 					maintainer_can_modify,
 				})
+				const pr = response.data
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `PR updated: **#${pr.number}: ${pr.title}**\nState: ${pr.state}\nURL: ${pr.html_url}\nUpdated: ${pr.updated_at}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -220,8 +235,9 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 					commit_message,
 					merge_method,
 				})
+				const m = response.data
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text: `PR merged successfully.\nMerged: ${m.merged}\nMessage: ${m.message}\nSHA: ${m.sha}` }],
 				}
 			} catch (e: any) {
 				return {
@@ -456,10 +472,10 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 		},
 	)
 
-	// Tool: Update Pull Request Branch (stub, not implemented)
+	// Tool: Update Pull Request Branch
 	server.tool(
 		"update_pull_request_branch",
-		"Update the branch of a pull request with the latest changes from the base branch (not implemented)",
+		"Update the branch of a pull request with the latest changes from the base branch",
 		{
 			owner: z.string().describe("Repository owner"),
 			repo: z.string().describe("Repository name"),
@@ -469,9 +485,27 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 				.optional()
 				.describe("The expected SHA of the pull request's HEAD ref"),
 		},
-		async () => {
-			return {
-				content: [{ type: "text", text: "Not implemented yet" }],
+		async ({ owner, repo, pullNumber, expectedHeadSha }) => {
+			try {
+				const response = await octokit.rest.pulls.updateBranch({
+					owner,
+					repo,
+					pull_number: pullNumber,
+					...(expectedHeadSha ? { expected_head_sha: expectedHeadSha } : {}),
+				})
+
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Branch updated successfully.\n\nMessage: ${response.data.message}\nURL: ${response.data.url}`,
+						},
+					],
+				}
+			} catch (e: any) {
+				return {
+					content: [{ type: "text", text: `Error: ${e.message}` }],
+				}
 			}
 		},
 	)
@@ -621,8 +655,13 @@ export function registerPullRequestTools(server: McpServer, octokit: Octokit) {
 					draft,
 					maintainer_can_modify,
 				})
+				const pr = response.data
+				let text = `PR created: **#${pr.number}: ${pr.title}**\n`
+				text += `URL: ${pr.html_url}\n`
+				text += `State: ${pr.state}${pr.draft ? " (draft)" : ""}\n`
+				text += `Branch: ${pr.head.label} -> ${pr.base.label}\n`
 				return {
-					content: [{ type: "text", text: JSON.stringify(response.data) }],
+					content: [{ type: "text", text }],
 				}
 			} catch (e: any) {
 				return {
