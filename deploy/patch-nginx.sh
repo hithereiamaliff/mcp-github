@@ -1,8 +1,12 @@
 #!/bin/bash
 # Patches the nginx config for mcp.techmavie.digital to add:
 # 1. proxy_request_buffering off; to the /github/ block
-# 2. Server card location block
-# 3. OAuth metadata 404 handlers
+# 2. OAuth metadata 404 handlers (if not already present)
+#
+# NOTE: Server card is NOT added here because mcp-nextcloud already owns
+# /.well-known/mcp/server-card.json via its snippet. The GitHub server card
+# is accessible at /github/.well-known/mcp/server-card.json through the
+# existing /github/ proxy block.
 #
 # Usage: bash /opt/mcp-servers/github/deploy/patch-nginx.sh
 
@@ -18,7 +22,6 @@ cp "$NGINX_CONF" "${NGINX_CONF}.bak.$(date +%Y%m%d%H%M%S)"
 echo "Backup created."
 
 # 1. Add proxy_request_buffering off; to the /github/ block
-#    Insert after "proxy_cache off;" in the github block (before "# Allow large request bodies")
 if grep -q "proxy_request_buffering off" "$NGINX_CONF"; then
     echo "SKIP: proxy_request_buffering already present"
 else
@@ -30,24 +33,7 @@ else
     echo "DONE: Added proxy_request_buffering off to /github/ block"
 fi
 
-# 2. Add server card and OAuth 404 blocks before the nextcloud server card include
-if grep -q "well-known/mcp/server-card.json" "$NGINX_CONF"; then
-    echo "SKIP: server-card location already present"
-else
-    sed -i '/include \/etc\/nginx\/snippets\/mcp-nextcloud-server-card.conf;/i\
-    # GitHub MCP Server - server card (root-level)\
-    location = /.well-known/mcp/server-card.json {\
-        proxy_pass http://127.0.0.1:8084/.well-known/mcp/server-card.json;\
-        proxy_http_version 1.1;\
-        proxy_set_header Host $host;\
-        proxy_set_header X-Real-IP $remote_addr;\
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-        proxy_set_header X-Forwarded-Proto $scheme;\
-    }' "$NGINX_CONF"
-    echo "DONE: Added server-card location block"
-fi
-
-# 3. Add OAuth metadata 404 handlers
+# 2. Add OAuth metadata 404 handlers (if not already present)
 if grep -q "oauth-protected-resource" "$NGINX_CONF"; then
     echo "SKIP: OAuth 404 handlers already present"
 else
