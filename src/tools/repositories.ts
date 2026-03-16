@@ -2,6 +2,72 @@ import { z } from "zod"
 import type { Octokit } from "octokit"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 
+function formatDirectoryGuidance(
+	owner: string,
+	repo: string,
+	path: string,
+	entries: Array<{ name: string; path: string; type?: string }>,
+	branch?: string,
+): string {
+	const trimmedPath = path.trim()
+	const displayPath = trimmedPath || "(repository root)"
+	const directories = entries
+		.filter(entry => entry.type === "dir")
+		.map(entry => entry.path)
+		.slice(0, 8)
+	const files = entries
+		.filter(entry => entry.type === "file")
+		.map(entry => entry.path)
+		.slice(0, 8)
+
+	let markdown = `# Directory Requested Instead of File\n\n`
+	markdown += `The path \`${displayPath}\` points to a directory, not a file.\n\n`
+	markdown += `## Recommended Next Calls\n\n`
+	markdown += `- Use \`get_repository\` with \`owner="${owner}"\` and \`repo="${repo}"\` for a repository overview and top-level structure.\n`
+
+	if (files.length > 0) {
+		const fileExamples = files
+			.slice(0, 3)
+			.map(file => `\`${file}\``)
+			.join(", ")
+		markdown += `- Retry \`get_file_contents\` with a file path from this directory, for example ${fileExamples}.${branch ? ` Keep \`branch="${branch}"\`.` : ""}\n`
+	}
+
+	if (directories.length > 0) {
+		const directoryExamples = directories
+			.slice(0, 3)
+			.map(dir => `\`${dir}\``)
+			.join(", ")
+		markdown += `- If you want something inside a subdirectory, use one of these as the starting path and add the file name: ${directoryExamples}.\n`
+	}
+
+	markdown += `\n## Directory Listing\n\n`
+
+	if (directories.length > 0) {
+		markdown += `### Directories\n`
+		directories.forEach(dir => {
+			markdown += `- ${dir}\n`
+		})
+		markdown += `\n`
+	}
+
+	if (files.length > 0) {
+		markdown += `### Files\n`
+		files.forEach(file => {
+			markdown += `- ${file}\n`
+		})
+		markdown += `\n`
+	}
+
+	if (directories.length === 0 && files.length === 0) {
+		markdown += `This directory is empty or GitHub did not return any entries.\n`
+	}
+
+	markdown += `\nOptional resource path if your client supports resources: \`repo://${owner}/${repo}/contents/${trimmedPath}\``
+
+	return markdown
+}
+
 export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 	// Tool: Get Repository Details
 	server.tool(
@@ -480,7 +546,17 @@ export function registerRepositoryTools(server: McpServer, octokit: Octokit) {
 						content: [
 							{
 								type: "text",
-								text: "Error: Path points to a directory, not a file.",
+								text: formatDirectoryGuidance(
+									owner,
+									repo,
+									path,
+									response.data.map(item => ({
+										name: item.name,
+										path: item.path,
+										type: item.type,
+									})),
+									branch,
+								),
 							},
 						],
 					}
