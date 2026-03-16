@@ -2,7 +2,7 @@
  * GitHub MCP Server - Streamable HTTP Transport
  *
  * Production-ready HTTP server for self-hosting on VPS.
- * Supports multiple auth modes: self-hosted, hosted key-service, Smithery.
+ * Supports multiple auth modes: self-hosted and hosted key-service.
  * Per-request McpServer/Transport isolation following mcpvps-deploymentguide patterns.
  *
  * Usage:
@@ -29,7 +29,6 @@ const HOST = process.env.HOST || '0.0.0.0';
 const MCP_API_KEY = process.env.MCP_API_KEY || '';
 const MCP_PROTOCOL_VERSION = process.env.MCP_PROTOCOL_VERSION || '2025-11-25';
 const ENABLE_MCP_DIAGNOSTICS = process.env.ENABLE_MCP_DIAGNOSTICS === 'true';
-const ENABLE_SMITHERY_ENDPOINT = process.env.ENABLE_SMITHERY_ENDPOINT === 'true';
 const MCP_TRACE_HTTP = process.env.MCP_TRACE_HTTP === 'true';
 const KEY_SERVICE_URL = process.env.KEY_SERVICE_URL || '';
 const KEY_SERVICE_TOKEN = process.env.KEY_SERVICE_TOKEN || '';
@@ -42,7 +41,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*')
   .filter(Boolean);
 const ALLOW_ALL_ORIGINS = ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes('*');
 
-type AuthMode = 'hosted-key-service' | 'self-hosted' | 'smithery' | 'diagnostics' | 'legacy-query';
+type AuthMode = 'hosted-key-service' | 'self-hosted' | 'diagnostics' | 'legacy-query';
 
 if (!MCP_API_KEY) {
   console.warn('MCP_API_KEY is not set. Self-hosted /mcp and /analytics access will be disabled.');
@@ -100,7 +99,6 @@ function getClientIp(req: Request): string {
 
 function normalizeRouteForAnalytics(req: Request): string {
   if (req.path.startsWith('/mcp/usr_')) return '/mcp/:userKey';
-  if (req.path === '/smithery/mcp') return '/smithery/mcp';
   if (req.path === '/mcp-debug/open') return '/mcp-debug/open';
   if (req.path === '/.well-known/mcp/server-card.json') return '/.well-known/mcp/server-card.json';
   if (req.path === '/mcp') return '/mcp';
@@ -417,12 +415,6 @@ async function handleMcpRequest(
     }
 
     token = await resolveUserKeyWithKeyService(userKey);
-  } else if (authMode === 'smithery') {
-    const githubToken = req.get('X-GitHub-Token');
-    if (!githubToken) {
-      throw new HttpError(400, 'missing_config', 'Missing X-GitHub-Token header for Smithery endpoint');
-    }
-    token = githubToken;
   } else if (authMode === 'self-hosted') {
     if (!MCP_API_KEY) {
       throw new HttpError(503, 'server_misconfigured', 'MCP_API_KEY is required to use self-hosted /mcp mode.');
@@ -1029,25 +1021,6 @@ app.all('/mcp', async (req: Request, res: Response) => {
   }
 });
 
-// Smithery mode: /smithery/mcp (env-gated)
-if (ENABLE_SMITHERY_ENDPOINT) {
-  app.all('/smithery/mcp', async (req: Request, res: Response) => {
-    try {
-      await handleMcpRequest(req, res, 'smithery');
-    } catch (error) {
-      if (error instanceof HttpError && !res.headersSent) {
-        res.status(error.status).json({ error: error.code, message: error.message });
-      } else if (!res.headersSent) {
-        res.status(500).json({ error: 'internal_error', message: 'Unexpected error' });
-      }
-    }
-  });
-}
-
-// =============================================================================
-// Start server
-// =============================================================================
-
 app.listen(PORT, HOST, () => {
   console.log('='.repeat(60));
   console.log('GitHub MCP Server (Streamable HTTP) v2.0.0');
@@ -1058,7 +1031,6 @@ app.listen(PORT, HOST, () => {
   console.log(`Discovery: /.well-known/mcp/server-card.json`);
   console.log(`Analytics: ${withPublicBasePath('/analytics/dashboard')}`);
   console.log(`Diagnostics: ${ENABLE_MCP_DIAGNOSTICS ? `${withPublicBasePath('/mcp-debug/open')} (enabled)` : 'disabled'}`);
-  console.log(`Smithery: ${ENABLE_SMITHERY_ENDPOINT ? `${withPublicBasePath('/smithery/mcp')} (enabled)` : 'disabled'}`);
   console.log(`HTTP tracing: ${MCP_TRACE_HTTP ? 'enabled' : 'disabled'}`);
   console.log(`Self-hosted auth: ${MCP_API_KEY ? 'enabled' : 'disabled (set MCP_API_KEY to enable /mcp and /analytics)'}`);
   console.log(`Key service: ${KEY_SERVICE_URL ? 'configured' : 'not configured'}`);

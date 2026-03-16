@@ -1,20 +1,15 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { Octokit } from "octokit"
-import { z } from "zod"
 import { registerIssueTools } from "./tools/issues.js"
 import { registerPullRequestTools } from "./tools/pullrequests.js"
 import { registerRepositoryTools } from "./tools/repositories.js"
 import { registerSearchTools } from "./tools/search.js"
 import { registerRepositoryResource } from "./resources/repository_resource.js"
 
-export const configSchema = z.object({
-	githubPersonalAccessToken: z.string().describe("GitHub personal access token for authentication. Create one at: https://github.com/settings/personal-access-tokens"),
-})
-
 /**
  * Registers all tools and resources on a McpServer instance.
- * Used by both Smithery (index.ts) and HTTP (http-server.ts) entry points.
+ * Used by both CLI and HTTP entry points.
  */
 export function registerAllToolsAndResources(server: McpServer, octokit: Octokit): void {
 	registerSearchTools(server, octokit)
@@ -42,7 +37,7 @@ export function registerAllToolsAndResources(server: McpServer, octokit: Octokit
 	)
 }
 
-export default function ({ config }: { config: z.infer<typeof configSchema> }) {
+export function createStatelessServer(githubPersonalAccessToken: string): McpServer {
 	try {
 		console.log("Starting GitHub MCP Server...")
 
@@ -51,11 +46,11 @@ export default function ({ config }: { config: z.infer<typeof configSchema> }) {
 			version: "2.0.0",
 		})
 
-		const octokit = new Octokit({ auth: config.githubPersonalAccessToken })
+		const octokit = new Octokit({ auth: githubPersonalAccessToken })
 
 		registerAllToolsAndResources(server, octokit)
 
-		return server.server
+		return server
 	} catch (e) {
 		console.error(e)
 		throw e

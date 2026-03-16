@@ -12,10 +12,9 @@ https://mcp.techmavie.digital/github
 
 | Mode | Endpoint | Required client auth |
 |------|----------|----------------------|
-| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` |
 | Hosted key-service | `POST /github/mcp/usr_...` | hosted user key in path |
 | Hosted compatibility | `POST /github/mcp?api_key=usr_...` | hosted user key in query |
-| Smithery | `POST /github/smithery/mcp` | `X-GitHub-Token` |
+| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` |
 | Legacy | `POST /github/mcp?token=...` | explicit deprecated query token |
 | Diagnostics | `POST /github/mcp-debug/open` | none, when enabled |
 
@@ -47,7 +46,6 @@ ALLOWED_ORIGINS=https://claude.ai,https://your-domain.com
 PUBLIC_BASE_PATH=/github
 MCP_TRACE_HTTP=false
 ENABLE_MCP_DIAGNOSTICS=false
-ENABLE_SMITHERY_ENDPOINT=false
 ANALYTICS_DIR=/app/data
 ```
 
@@ -213,7 +211,6 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token_here mcp-github
 | `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version |
 | `MCP_TRACE_HTTP` | `false` | sanitized request tracing |
 | `ENABLE_MCP_DIAGNOSTICS` | `false` | diagnostics endpoint |
-| `ENABLE_SMITHERY_ENDPOINT` | `false` | Smithery endpoint |
 | `ANALYTICS_DIR` | `/app/data` | analytics storage directory |
 
 ## Useful Commands

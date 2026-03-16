@@ -4,14 +4,34 @@ Model Context Protocol server for GitHub repositories, issues, pull requests, br
 
 It ships with 34 tools across 5 categories and supports:
 
-- CLI/stdio usage for local MCP clients
-- self-hosted Streamable HTTP deployments
 - hosted key-service mode with `usr_...` user keys
-- an optional Smithery endpoint
+- self-hosted Streamable HTTP deployments
+- CLI/stdio usage for local MCP clients
 
 ## Quick Start
 
-### Option 1: Self-hosted HTTP
+### Option 1: Hosted key-service mode
+
+Preferred path-based form:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "transport": "streamable-http",
+      "url": "https://mcp.techmavie.digital/github/mcp/usr_YOUR_USER_KEY"
+    }
+  }
+}
+```
+
+Compatibility query form:
+
+```text
+https://mcp.techmavie.digital/github/mcp?api_key=usr_YOUR_USER_KEY
+```
+
+### Option 2: Self-hosted HTTP
 
 Use header-based auth on `/github/mcp`:
 
@@ -32,27 +52,6 @@ Use header-based auth on `/github/mcp`:
 
 `MCP_API_KEY` must be configured on the server or self-hosted `/mcp` requests will be rejected.
 For deployments mounted under `/github`, set `PUBLIC_BASE_PATH=/github` so the server card advertises the correct public endpoint.
-
-### Option 2: Hosted key-service mode
-
-Preferred path-based form:
-
-```json
-{
-  "mcpServers": {
-    "github": {
-      "transport": "streamable-http",
-      "url": "https://mcp.techmavie.digital/github/mcp/usr_YOUR_USER_KEY"
-    }
-  }
-}
-```
-
-Compatibility query form:
-
-```text
-https://mcp.techmavie.digital/github/mcp?api_key=usr_YOUR_USER_KEY
-```
 
 ### Option 3: CLI / stdio
 
@@ -91,10 +90,9 @@ The server no longer falls back to its own `GITHUB_PERSONAL_ACCESS_TOKEN` for ba
 
 | Mode | Endpoint | Client auth |
 |------|----------|-------------|
-| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` headers |
 | Hosted key-service | `POST /github/mcp/usr_...` | user key in path |
 | Hosted key-service compatibility | `POST /github/mcp?api_key=usr_...` | user key in query string |
-| Smithery | `POST /github/smithery/mcp` | `X-GitHub-Token` header |
+| Self-hosted | `POST /github/mcp` | `X-API-Key` and `X-GitHub-Token` headers |
 | Legacy | `POST /github/mcp?token=...` | explicit query token, deprecated |
 | CLI | stdio | `GITHUB_PERSONAL_ACCESS_TOKEN` env var |
 
@@ -154,9 +152,8 @@ The server no longer falls back to its own `GITHUB_PERSONAL_ACCESS_TOKEN` for ba
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | health check |
-| `/mcp` | POST | self-hosted endpoint |
 | `/mcp/:userKey` | POST | hosted key-service endpoint |
-| `/smithery/mcp` | POST | Smithery endpoint when enabled |
+| `/mcp` | POST | self-hosted endpoint |
 | `/mcp-debug/open` | POST | diagnostics endpoint when enabled |
 | `/.well-known/mcp/server-card.json` | GET | root-level discovery metadata |
 | `/analytics` | GET | analytics JSON, requires `X-API-Key` |
@@ -184,7 +181,6 @@ https://mcp.techmavie.digital/.well-known/mcp/server-card.json
 | `MCP_PROTOCOL_VERSION` | `2025-11-25` | protocol version reported by HTTP server |
 | `MCP_TRACE_HTTP` | `false` | enable sanitized request tracing |
 | `ENABLE_MCP_DIAGNOSTICS` | `false` | enable `/mcp-debug/open` |
-| `ENABLE_SMITHERY_ENDPOINT` | `false` | enable `/smithery/mcp` |
 | `ANALYTICS_DIR` | `/app/data` | analytics storage directory |
 
 ## Local Development

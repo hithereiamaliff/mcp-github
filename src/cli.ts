@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import createStatelessServer, { configSchema } from './index.js';
+import { createStatelessServer } from './index.js';
 
 async function main() {
   const { GITHUB_PERSONAL_ACCESS_TOKEN } = process.env;
@@ -14,11 +14,7 @@ async function main() {
   }
 
   try {
-    const config = configSchema.parse({
-      githubPersonalAccessToken: GITHUB_PERSONAL_ACCESS_TOKEN,
-    });
-
-    const server = createStatelessServer({ config });
+    const server = createStatelessServer(GITHUB_PERSONAL_ACCESS_TOKEN);
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
